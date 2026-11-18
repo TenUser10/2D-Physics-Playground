@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>2D Physics Playground</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #f3f4f6;
+      font-family: 'Courier New', Courier, monospace;
+      touch-action: none;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+    canvas {
+      display: block;
+    }
+
+    #top-hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-panel {
+      pointer-events: auto;
+      background: #ffffff;
+      border: 2px solid #111827;
+      padding: 6px 10px;
+      box-shadow: 3px 3px 0px #111827;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #111827;
+    }
+    .hud-btn {
+      background: #ffffff;
+      border: 1.5px solid #111827;
+      padding: 4px 8px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .hud-btn:hover {
+      background: #e5e7eb;
+    }
+    .hud-btn:active {
+      transform: translate(1px, 1px);
+    }
+    .hud-btn.active {
+      background: #111827;
+      color: #ffffff;
+    }
+    input[type="range"] {
+      width: 70px;
+      accent-color: #111827;
+      cursor: pointer;
+    }
+
+    #spawn-bar {
+      position: fixed;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffffff;
+      border: 2px solid #111827;
+      box-shadow: 4px 4px 0px #111827;
+      display: flex;
+      align-items: center;
+      padding: 4px;
+      gap: 4px;
+      z-index: 20;
+      touch-action: none;
+      max-width: 96vw;
+      overflow-x: auto;
+    }
+    #drag-handle {
+      cursor: grab;
+      padding: 8px 6px;
+      background: #e5e7eb;
+      border-right: 1.5px solid #111827;
+      font-size: 14px;
+      line-height: 1;
+      color: #111827;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #drag-handle:active {
+      cursor: grabbing;
+      background: #d1d5db;
+    }
+    .tool-btn {
+      background: #ffffff;
+      border: 1.5px solid transparent;
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: bold;
+      color: #111827;
+      cursor: pointer;
+      white-space: nowrap;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .tool-btn span.key {
+      font-size: 9px;
+      color: #6b7280;
+    }
+    .tool-btn:hover {
+      border-color: #9ca3af;
+    }
+    .tool-btn.active {
+      background: #111827;
+      color: #ffffff;
+      border-color: #111827;
+    }
+    .tool-btn.active span.key {
+      color: #d1d5db;
+    }
+    .tool-btn.unlink-active {
+      background: #dc2626;
+      color: #ffffff;
+      border-color: #991b1b;
+    }
+    .tool-btn.unlink-active span.key {
+      color: #fecaca;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="top-hud">
+    <div class="hud-panel">
+      <span>SANDBOX v0.1</span>
+      <span id="body-count">Bodies: 0</span>
+      <span id="joint-count">Joints: 0</span>
+    </div>
+
+    <div class="hud-panel">
+      <label for="gravity-slider">G: <span id="gravity-val">1.0</span></label>
+      <input type="range" id="gravity-slider" min="-1" max="2.5" step="0.1" value="1.0" />
+      <button class="hud-btn" id="btn-pause">PAUSE [Space]</button>
+      <button class="hud-btn" id="btn-clear">CLEAR</button>
+    </div>
+  </div>
+
+  <div id="spawn-bar">
+    <div id="drag-handle" title="Drag to move toolbar (Double-click to reset)">⠿</div>
+    <button class="tool-btn active" data-tool="drag">
+      <span>Grab</span>
+      <span class="key">[1]</span>
+    </button>
+    <button class="tool-btn" data-tool="ragdoll">
+      <span>Ragdoll</span>
+      <span class="key">[2]</span>
+    </button>
+    <button class="tool-btn" data-tool="box">
+      <span>Box</span>
+      <span class="key">[3]</span>
+    </button>
+    <button class="tool-btn" data-tool="ball">
+      <span>Ball</span>
+      <span class="key">[4]</span>
+    </button>
+    <button class="tool-btn" data-tool="plank">
+      <span>Plank</span>
+      <span class="key">[5]</span>
+    </button>
+    <button class="tool-btn" data-tool="bomb">
+      <span>Bomb</span>
+      <span class="key">[6]</span>
+    </button>
+    <button class="tool-btn" data-tool="unlink">
+      <span>Unlink</span>
+      <span class="key">[U]</span>
+    </button>
+    <button class="tool-btn" data-tool="delete">
+      <span>Erase</span>
+      <span class="key">[X]</span>
+    </button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <script>
+    const {
+      Engine, Render, Runner, World, Bodies, Body, Composite,
+      Constraint, Mouse, MouseConstraint, Events, Query, Vector
+    } = Matter;
+
+    const engine = Engine.create();
+    const world = engine.world;
+    world.gravity.y = 1.0;
+
+    const container = document.getElementById('canvas-container');
+    const render = Render.create({
+      element: container,
+      engine: engine,
+      options: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        wireframes: false,
+        background: 'transparent'
+      }
+    });
+
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    let walls = [];
+    function createBoundaries() {
+      if (walls.length > 0) Composite.remove(world, walls);
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const thick = 100;
+      const wallStyle = { fillStyle: '#111827', strokeStyle: '#111827', lineWidth: 1 };
+
+      walls = [
+        Bodies.rectangle(w / 2, h + thick / 2 - 12, w + 200, thick, { isStatic: true, render: wallStyle }),
+        Bodies.rectangle(w / 2, -thick / 2, w + 200, thick, { isStatic: true, render: wallStyle }),
+        Bodies.rectangle(-thick / 2, h / 2, thick, h + 200, { isStatic: true, render: wallStyle }),
+        Bodies.rectangle(w + thick / 2, h / 2, thick, h + 200, { isStatic: true, render: wallStyle })
+      ];
+      Composite.add(world, walls);
+    }
+    createBoundaries();
+
+    window.addEventListener('resize', () => {
+      render.canvas.width = window.innerWidth;
+      render.canvas.height = window.innerHeight;
+      createBoundaries();
+    });
+
+    const mouse = Mouse.create(render.canvas);
+    const mouseConstraint = MouseConstraint.create(engine, {
+      mouse: mouse,
+      constraint: {
+        stiffness: 0.2,
+        render: {
+          visible: true,
+          strokeStyle: '#2563eb',
+          lineWidth: 2
+        }
+      }
+    });
+    Composite.add(world, mouseConstraint);
+    render.mouse = mouse;
+
+    let currentTool = 'drag';
+    let shockwaves = [];
+
+    function spawnBox(x, y) {
+      const size = 38 + Math.random() * 18;
+      const box = Bodies.rectangle(x, y, size, size, {
+        restitution: 0.2,
+        friction: 0.6,
+        render: {
+          fillStyle: '#ffffff',
+          strokeStyle: '#111827',
+          lineWidth: 2
+        }
+      });
+      Composite.add(world, box);
+    }
+
+    function spawnBall(x, y) {
+      const radius = 18 + Math.random() * 10;
+      const ball = Bodies.circle(x, y, radius, {
+        restitution: 0.75,
+        friction: 0.1,
+        render: {
+          fillStyle: '#e5e7eb',
+          strokeStyle: '#111827',
+          lineWidth: 2
+        }
+      });
+      Composite.add(world, ball);
+    }
+
+    function spawnPlank(x, y) {
+      const plank = Bodies.rectangle(x, y, 140, 16, {
+        restitution: 0.1,
+        friction: 0.7,
+        render: {
+          fillStyle: '#d1d5db',
+          strokeStyle: '#111827',
+          lineWidth: 2
+        }
+      });
+      Composite.add(world, plank);
+    }
+
+    function spawnBomb(x, y) {
+      const radius = 240;
+      const maxForce = 0.08;
+      const allBodies = Composite.allBodies(world);
+
+      allBodies.forEach(body => {
+        if (body.isStatic) return;
+        const delta = Vector.sub(body.position, { x, y });
+        const dist = Vector.magnitude(delta);
+        if (dist < radius && dist > 1) {
+          const dir = Vector.normalise(delta);
+          const strength = (1 - dist / radius) * maxForce * body.mass;
+          Body.applyForce(body, body.position, Vector.mult(dir, strength));
+        }
+      });
+
+      shockwaves.push({ x, y, r: 10, maxR: radius, alpha: 1.0 });
+    }
+
+    function spawnRagdoll(x, y) {
+      const group = Body.nextGroup(true);
+
+      const partStyle = (fill) => ({
+        collisionFilter: { group },
+        friction: 0.6,
+        restitution: 0.15,
+        render: {
+          fillStyle: fill,
+          strokeStyle: '#111827',
+          lineWidth: 2
+        }
+      });
+
+      const head = Bodies.circle(x, y - 56, 14, partStyle('#ffffff'));
+      const chest = Bodies.rectangle(x, y - 22, 26, 36, partStyle('#e5e7eb'));
+      const pelvis = Bodies.rectangle(x, y + 6, 24, 18, partStyle('#d1d5db'));
+
+      const leftUpperArm = Bodies.rectangle(x - 20, y - 26, 10, 26, partStyle('#ffffff'));
+      const leftLowerArm = Bodies.rectangle(x - 20, y - 2, 9, 24, partStyle('#f9fafb'));
+      const rightUpperArm = Bodies.rectangle(x + 20, y - 26, 10, 26, partStyle('#ffffff'));
+      const rightLowerArm = Bodies.rectangle(x + 20, y - 2, 9, 24, partStyle('#f9fafb'));
+
+      const leftThigh = Bodies.rectangle(x - 8, y + 30, 11, 30, partStyle('#ffffff'));
+      const leftCalf = Bodies.rectangle(x - 8, y + 58, 10, 28, partStyle('#f9fafb'));
+      const rightThigh = Bodies.rectangle(x + 8, y + 30, 11, 30, partStyle('#ffffff'));
+      const rightCalf = Bodies.rectangle(x + 8, y + 58, 10, 28, partStyle('#f9fafb'));
+
+      const jointStyle = {
+        visible: true,
+        strokeStyle: '#dc2626',
+        lineWidth: 2,
+        anchors: true
+      };
+
+      const makeJoint = (bodyA, pointA, bodyB, pointB, stiffness = 0.65) =>
+        Constraint.create({
+          bodyA, pointA, bodyB, pointB,
+          stiffness,
+          length: 0,
+          render: jointStyle
+        });
+
+      const joints = [
+        makeJoint(head, { x: 0, y: 14 }, chest, { x: 0, y: -18 }, 0.7),
+        makeJoint(chest, { x: 0, y: 18 }, pelvis, { x: 0, y: -9 }, 0.75),
+        makeJoint(chest, { x: -13, y: -14 }, leftUpperArm, { x: 0, y: -11 }, 0.6),
+        makeJoint(leftUpperArm, { x: 0, y: 12 }, leftLowerArm, { x: 0, y: -11 }, 0.6),
+        makeJoint(chest, { x: 13, y: -14 }, rightUpperArm, { x: 0, y: -11 }, 0.6),
+        makeJoint(rightUpperArm, { x: 0, y: 12 }, rightLowerArm, { x: 0, y: -11 }, 0.6),
+        makeJoint(pelvis, { x: -7, y: 8 }, leftThigh, { x: 0, y: -13 }, 0.65),
+        makeJoint(leftThigh, { x: 0, y: 14 }, leftCalf, { x: 0, y: -13 }, 0.65),
+        makeJoint(pelvis, { x: 7, y: 8 }, rightThigh, { x: 0, y: -13 }, 0.65),
+        makeJoint(rightThigh, { x: 0, y: 14 }, rightCalf, { x: 0, y: -13 }, 0.65)
+      ];
+
+      Composite.add(world, [
+        head, chest, pelvis,
+        leftUpperArm, leftLowerArm, rightUpperArm, rightLowerArm,
+        leftThigh, leftCalf, rightThigh, rightCalf,
+        ...joints
+      ]);
+    }
+
+    spawnRagdoll(window.innerWidth / 2, window.innerHeight / 2 - 60);
+
+    function getJointWorldPosition(c) {
+      if (!c.bodyA) return c.pointA;
+      const rotated = Vector.rotate(c.pointA, c.bodyA.angle);
+      return Vector.add(c.bodyA.position, rotated);
+    }
+
+    function unlinkJointsAt(x, y, hitRadius = 22) {
+      const allConstraints = Composite.allConstraints(world);
+      for (let i = allConstraints.length - 1; i >= 0; i--) {
+        const c = allConstraints[i];
+        if (c === mouseConstraint.constraint) continue;
+        const pos = getJointWorldPosition(c);
+        if (!pos) continue;
+        const dist = Vector.magnitude(Vector.sub(pos, { x, y }));
+        if (dist <= hitRadius) {
+          Composite.remove(world, c);
+        }
+      }
+    }
+
+    function eraseBodyAt(x, y) {
+      const bodies = Composite.allBodies(world).filter(b => !b.isStatic);
+      const hit = Query.point(bodies, { x, y });
+      if (hit.length > 0) {
+        const target = hit[0];
+        const constraints = Composite.allConstraints(world);
+        constraints.forEach(c => {
+          if (c !== mouseConstraint.constraint && (c.bodyA === target || c.bodyB === target)) {
+            Composite.remove(world, c);
+          }
+        });
+        Composite.remove(world, target);
+      }
+    }
+
+    let isPointerDown = false;
+    let pointerPos = { x: -100, y: -100 };
+
+    function handlePointerDown(x, y) {
+      isPointerDown = true;
+      pointerPos = { x, y };
+
+      if (currentTool === 'ragdoll') spawnRagdoll(x, y);
+      else if (currentTool === 'box') spawnBox(x, y);
+      else if (currentTool === 'ball') spawnBall(x, y);
+      else if (currentTool === 'plank') spawnPlank(x, y);
+      else if (currentTool === 'bomb') spawnBomb(x, y);
+      else if (currentTool === 'unlink') unlinkJointsAt(x, y, 24);
+      else if (currentTool === 'delete') eraseBodyAt(x, y);
+    }
+
+    function handlePointerMove(x, y) {
+      pointerPos = { x, y };
+      if (!isPointerDown) return;
+      if (currentTool === 'unlink') unlinkJointsAt(x, y, 24);
+      else if (currentTool === 'delete') eraseBodyAt(x, y);
+    }
+
+    render.canvas.addEventListener('mousedown', (e) => handlePointerDown(e.clientX, e.clientY));
+    window.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', () => { isPointerDown = false; });
+
+    render.canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length > 0) {
+        handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) {
+        handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: true });
+    window.addEventListener('touchend', () => { isPointerDown = false; });
+
+    Events.on(render, 'beforeRender', () => {
+      const ctx = render.context;
+      const w = render.canvas.width;
+      const h = render.canvas.height;
+
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = '#e5e7eb';
+      ctx.lineWidth = 1;
+      const step = 32;
+      ctx.beginPath();
+      for (let x = 0; x < w; x += step) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+      }
+      for (let y = 0; y < h; y += step) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+      }
+      ctx.stroke();
+    });
+
+    Events.on(render, 'afterRender', () => {
+      const ctx = render.context;
+
+      const constraints = Composite.allConstraints(world);
+      constraints.forEach(c => {
+        if (c === mouseConstraint.constraint) return;
+        const pos = getJointWorldPosition(c);
+        if (!pos) return;
+
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#dc2626';
+        ctx.fill();
+
+        if (currentTool === 'unlink') {
+          ctx.beginPath();
+          ctx.setLineDash([3, 3]);
+          ctx.arc(pos.x, pos.y, 14, 0, Math.PI * 2);
+          ctx.strokeStyle = '#dc2626';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      });
+
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const sw = shockwaves[i];
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(17, 24, 39, ${sw.alpha})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        sw.r += 14;
+        sw.alpha -= 0.06;
+        if (sw.alpha <= 0) shockwaves.splice(i, 1);
+      }
+
+      const dynamicBodies = Composite.allBodies(world).filter(b => !b.isStatic).length;
+      const activeJoints = Math.max(0, constraints.length - 1);
+      document.getElementById('body-count').textContent = `Bodies: ${dynamicBodies}`;
+      document.getElementById('joint-count').textContent = `Joints: ${activeJoints}`;
+    });
+
+    const toolButtons = document.querySelectorAll('.tool-btn');
+
+    function setTool(toolName) {
+      currentTool = toolName;
+      mouseConstraint.collisionFilter.mask = (toolName === 'drag') ? 0xFFFFFFFF : 0x00000000;
+
+      toolButtons.forEach(btn => {
+        btn.classList.remove('active', 'unlink-active');
+        if (btn.dataset.tool === toolName) {
+          btn.classList.add(toolName === 'unlink' ? 'unlink-active' : 'active');
+        }
+      });
+    }
+
+    toolButtons.forEach(btn => {
+      btn.addEventListener('click', () => setTool(btn.dataset.tool));
+    });
+
+    const gravitySlider = document.getElementById('gravity-slider');
+    const gravityVal = document.getElementById('gravity-val');
+    gravitySlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      world.gravity.y = val;
+      gravityVal.textContent = val.toFixed(1);
+    });
+
+    let isPaused = false;
+    const btnPause = document.getElementById('btn-pause');
+    function togglePause() {
+      isPaused = !isPaused;
+      runner.enabled = !isPaused;
+      btnPause.textContent = isPaused ? 'RESUME [Space]' : 'PAUSE [Space]';
+      btnPause.classList.toggle('active', isPaused);
+    }
+    btnPause.addEventListener('click', togglePause);
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      const allBodies = Composite.allBodies(world).filter(b => !b.isStatic);
+      const allConstraints = Composite.allConstraints(world).filter(c => c !== mouseConstraint.constraint);
+      Composite.remove(world, allConstraints);
+      Composite.remove(world, allBodies);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+      else if (e.key === '1') setTool('drag');
+      else if (e.key === '2') setTool('ragdoll');
+      else if (e.key === '3') setTool('box');
+      else if (e.key === '4') setTool('ball');
+      else if (e.key === '5') setTool('plank');
+      else if (e.key === '6') setTool('bomb');
+      else if (e.key.toLowerCase() === 'u') setTool('unlink');
+      else if (e.key.toLowerCase() === 'x') setTool('delete');
+    });
+
+    const spawnBar = document.getElementById('spawn-bar');
+    const dragHandle = document.getElementById('drag-handle');
+    let isDraggingBar = false;
+    let barOffset = { x: 0, y: 0 };
+
+    function startBarDrag(clientX, clientY) {
+      isDraggingBar = true;
+      const rect = spawnBar.getBoundingClientRect();
+      spawnBar.style.transform = 'none';
+      spawnBar.style.bottom = 'auto';
+      spawnBar.style.left = rect.left + 'px';
+      spawnBar.style.top = rect.top + 'px';
+      barOffset.x = clientX - rect.left;
+      barOffset.y = clientY - rect.top;
+    }
+
+    function moveBarDrag(clientX, clientY) {
+      if (!isDraggingBar) return;
+      const rect = spawnBar.getBoundingClientRect();
+      const maxX = window.innerWidth - rect.width;
+      const maxY = window.innerHeight - rect.height;
+      const nextX = Math.max(0, Math.min(maxX, clientX - barOffset.x));
+      const nextY = Math.max(0, Math.min(maxY, clientY - barOffset.y));
+      spawnBar.style.left = nextX + 'px';
+      spawnBar.style.top = nextY + 'px';
+    }
+
+    dragHandle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      startBarDrag(e.clientX, e.clientY);
+    });
+    window.addEventListener('mousemove', (e) => moveBarDrag(e.clientX, e.clientY));
+    window.addEventListener('mouseup', () => { isDraggingBar = false; });
+
+    dragHandle.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      if (e.touches.length > 0) startBarDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) moveBarDrag(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+    window.addEventListener('touchend', () => { isDraggingBar = false; });
+
+    dragHandle.addEventListener('dblclick', () => {
+      spawnBar.style.left = '50%';
+      spawnBar.style.top = 'auto';
+      spawnBar.style.bottom = '18px';
+      spawnBar.style.transform = 'translateX(-50%)';
+    });
+  </script>
+</body>
+</html>
